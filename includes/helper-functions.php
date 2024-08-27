@@ -935,9 +935,15 @@ if (!function_exists('atbdp_only_logged_in_user')) {
     {
         if (!is_user_logged_in()) {
             // user not logged in;
-            $error_message = (empty($message))
-                ? sprintf(__('You need to be logged in to view the content of this page. You can login %s. Don\'t have an account? %s', 'directorist'), apply_filters("atbdp_login_page_link", "<a href='" . ATBDP_Permalink::get_login_page_link() . "'> " . __('Here', 'directorist') . "</a>"), apply_filters("atbdp_signup_page_link", "<a href='" . ATBDP_Permalink::get_registration_page_link() . "'> " . __('Sign up', 'directorist') . "</a>"))
-                : $message;
+            if( get_option( 'directorist_merge_dashboard_login_reg_page' ) ) {
+                $error_message = ( empty( $message ) )
+                    ? sprintf( __( 'You need to be logged in to view the content of this page. You can login/sign up %s', 'directorist' ), apply_filters( "atbdp_login_page_link", "<a href='" . ATBDP_Permalink::get_dashboard_page_link() . "'> " . __( 'Here', 'directorist' ) . "</a>" ) )
+                    : $message;
+            } else {
+                $error_message = ( empty( $message ) )
+                    ? sprintf( __( 'You need to be logged in to view the content of this page. You can login %s. Don\'t have an account? %s', 'directorist' ), apply_filters( "atbdp_login_page_link", "<a href='" . ATBDP_Permalink::get_login_page_link() . "'> " . __('Here', 'directorist') . "</a>" ), apply_filters("atbdp_signup_page_link", "<a href='" . ATBDP_Permalink::get_registration_page_link() . "'> " . __( 'Sign up', 'directorist' ) . "</a>" ) )
+                    : $message;
+            }
             $container_fluid = is_directoria_active() ? 'container' : 'container-fluid';
             ?>
             <section class="directory_wrapper single_area">
@@ -1427,7 +1433,6 @@ function atbdp_listings_count_by_tag($term_id)
             ),
             array(
                 'key' => '_never_expire',
-                'value' => 1,
             ),
         ))
     );
@@ -2467,7 +2472,7 @@ function atbdp_get_listing_attachment_ids( $listing_id ) {
 	if ( empty( $gallery_images ) ) {
 		return $attachment_ids;
 	}
-	
+
     $attachment_ids = array_merge( $attachment_ids, $gallery_images );
 
     return $attachment_ids;
@@ -2634,14 +2639,6 @@ function atbdp_create_required_pages(){
         'user_dashboard' => array(
             'title' => __('Dashboard', 'directorist'),
             'content' => '[directorist_user_dashboard]'
-        ),
-        'custom_registration' => array(
-            'title' => __('Registration', 'directorist'),
-            'content' => '[directorist_custom_registration]'
-        ),
-        'user_login' => array(
-            'title' => __('Login', 'directorist'),
-            'content' => '[directorist_user_login]'
         ),
         /* 'checkout_page' => array(
             'title' => __('Checkout', 'directorist'),
@@ -2976,13 +2973,10 @@ if( ! function_exists( 'atbdp_field_assigned_plan' ) ) {
 }
 if( !function_exists('directory_types') ){
     function directory_types() {
-        $listing_types = get_terms([
-            'taxonomy'   => ATBDP_TYPE,
-            'hide_empty' => false,
-            'orderby'    => 'date',
-            'order'      => 'DSCE',
-          ]);
-          return $listing_types;
+		return directorist_get_directories( array(
+			'orderby'    => 'date',
+            'order'      => 'DESC',
+		) );
     }
 }
 
@@ -2993,14 +2987,10 @@ if ( ! function_exists( 'directorist_get_default_directory' ) ) {
 	 * @return int Default directory id.
 	 */
 	function directorist_get_default_directory() {
-		$directories = get_terms( [
-			'taxonomy'   => ATBDP_TYPE,
-			'hide_empty' => false,
-			'fields'     => 'ids',
-			'meta_key'   => '_default',
-			'meta_value' => '1',
-			'number'     => 1
-		] );
+		$directories = directorist_get_directories( array(
+			'default_only' => true,
+			'fields'       => 'ids',
+		) );
 
 		if ( empty( $directories ) || is_wp_error( $directories ) || ! isset( $directories[0] ) ) {
 			return 0;
@@ -3025,21 +3015,7 @@ if ( ! function_exists( 'default_directory_type' ) ) {
 
 if( !function_exists('get_listing_types') ){
     function get_listing_types() {
-        $listing_types = array();
-        $args          = array(
-            'taxonomy'   => ATBDP_TYPE,
-            'hide_empty' => false
-        );
-        $all_types     = get_terms( $args );
-
-        foreach ( $all_types as $type ) {
-            $listing_types[ $type->term_id ] = [
-                'term' => $type,
-                'name' => $type->name,
-                'data' => get_term_meta( $type->term_id, 'general_config', true ),
-            ];
-        }
-        return $listing_types;
+        return directorist_get_directories_for_template();
     }
 }
 
@@ -3049,6 +3025,11 @@ if( !function_exists('directorist_get_form_fields_by_directory_type') ){
         if( is_wp_error( $term ) ) {
             return [];
         }
+
+		if ( ! ( $term instanceof \WP_Term ) ) {
+		    return [];
+		}
+        
         $submission_form        = get_term_meta( $term->term_id, 'submission_form_fields', true );
         $submission_form_fields = ! empty( $submission_form['fields'] ) ? $submission_form['fields'] : [];
         return $submission_form_fields;
@@ -4024,33 +4005,33 @@ function directorist_password_reset_url( $user, $password_reset = true, $confirm
 
     global $directories_user_rest_keys;
 
-    if( is_array( $directories_user_rest_keys ) && !empty( $directories_user_rest_keys[$user->user_email] ) ) {
+    if( is_array( $directories_user_rest_keys ) && ! empty( $directories_user_rest_keys[$user->user_email] ) ) {
         $args['key'] = $directories_user_rest_keys[$user->user_email];
     } else {
-        $key = get_password_reset_key( $user );
+        $key                                           = get_password_reset_key( $user );
         $directories_user_rest_keys[$user->user_email] = $key;
-        $args['key'] = $key;
+        $args['key']                                   = $key;
     }
 
-    if($password_reset) {
+    if ( $password_reset ) {
         $args['password_reset'] = true;
     }
 
-    if($confirm_mail) {
+    if ( $confirm_mail ) {
         $args['confirm_mail'] = true;
     }
 
-    $reset_password_url = ATBDP_Permalink::get_login_page_url($args);
+    $reset_password_url = ATBDP_Permalink::get_dashboard_page_link( $args );
 
     return apply_filters( 'directorist_password_reset_url', $reset_password_url );
 }
 
 /**
  * Get allowed mime types.
- * 
+ *
  * @param string $filterby Filter allowed mime types by group. eg. image, audio, video, document etc.
  * @param string $return_type Get the full mime types map or only extensions. Valid args are extension and .extension.
- * 
+ *
  * @return array
  */
 function directorist_get_mime_types( $filterby = '', $return_type = '' ) {
@@ -4225,7 +4206,7 @@ function directorist_background_image_process( $images ) {
 		}
 
 		$should_dispatch = true;
-		
+
 		ATBDP()->background_image_process->push_to_queue( array( $image_id => $image_path ) );
 	}
 
@@ -4235,20 +4216,123 @@ function directorist_background_image_process( $images ) {
 }
 
 /**
- * Get or modify the status of a directory listing during editing.
+ * Delete directory even when non empty.
  *
- * @param int    $directory_type The directory type ID.
- * @param int    $listing_id      The listing ID.
+ * @since 7.9.1
  *
- * @return string The edited or original status for the listing.
+ * @param $dir Directory path.
  */
-function directorist_get_listing_edit_status( $directory_type ) {
-	$edit_listing_status = get_term_meta( $directory_type, 'edit_listing_status', true );
-	$new_listing_status  = get_term_meta( $directory_type, 'new_listing_status', true );
-    
-    if ( 'publish' !== $new_listing_status && 'publish' === $edit_listing_status ) {
-        $edit_listing_status = $new_listing_status;
+function directorist_delete_dir( $dir ) {
+	$objects = scandir( $dir );
+
+	unset( $objects[0], $objects[1] ); // Remove '.' and '..' entries
+
+	foreach ( $objects as $object ) {
+		if ( is_dir( $dir . '/' . $object ) ) {
+			directorist_delete_dir( $dir . '/' . $object );
+		} else {
+			unlink( $dir . '/' . $object );
+		}
+	}
+
+	if ( ! rmdir( $dir ) ) {
+		throw new Exception( "Failed to remove directory: $dir" );
+	}
+}
+
+/**
+ * Remove temporary upload directories.
+ *
+ * @since 7.9.1
+ *
+ * @return void
+ */
+function directorist_delete_temporary_upload_dirs() {
+	$upload_dir = wp_get_upload_dir();
+	$temp_dir   = trailingslashit( $upload_dir['basedir'] ) . 'directorist_temp_uploads/';
+
+	$dirs = scandir( $temp_dir );
+	$date = date( 'nj' );
+
+	unset( $dirs[0], $dirs[1] ); // Remove '.' and '..' entries
+
+	foreach ( $dirs as $dir ) {
+		// Check if it's a directory and older than current date
+		if ( is_dir( $temp_dir . $dir ) && $dir < $date ) {
+			try {
+				directorist_delete_dir( $temp_dir . $dir );
+			} catch ( Exception $e ) {
+				error_log( 'Error removing directory: ' . $temp_dir . $dir . ' - ' . $e->getMessage() );
+			}
+		}
+	}
+}
+
+/**
+ * Formats a given date value according to WordPress settings or provided format.
+ *
+ * @param string $date The date value to format.
+ * @param string $format Optional. The format to use. If empty, uses the WordPress settings.
+ * @return string The formatted date string, or an empty string if the input value is empty.
+ */
+function directorist_format_date( $date = '', $format = '' ) {
+    $date = strtotime( $date );
+    if ( ! $date ) {
+        return '';
     }
 
-    return $edit_listing_status;
+    $format = apply_filters( 'directorist_date_format', ( $format ? $format : get_option( 'date_format' ) ) );
+
+    return date( $format, $date );
+}
+
+/**
+ * Formats a given time value according to WordPress settings or provided format.
+ *
+ * @param string $time The time value to format.
+ * @param string $format Optional. The format to use. If empty, uses the WordPress settings.
+ * @return string The formatted time string, or an empty string if the input value is empty.
+ */
+function directorist_format_time( $time = '', $format = '' ) {
+    $time = strtotime( $time );
+    if ( ! $time ) {
+        return '';
+    }
+
+    $format = apply_filters( 'directorist_time_format', ( $format ? $format : get_option( 'time_format' ) ) );
+
+    return date( $format, $time );
+}
+
+function directorist_filter_listing_empty_metadata( $meta_data ) {
+	return array_filter( $meta_data, static function( $value, $key ) {
+		if ( $key === '_hide_contact_owner' && ! $value ) {
+			return false;
+		}
+
+		if ( is_array( $value ) ) {
+			return ! empty( $value );
+		}
+
+		if ( is_null( $value ) ) {
+			return false;
+		}
+
+		if ( is_string( $value ) && $value === '' ) {
+			return false;
+		}
+
+		if ( is_numeric( $value ) && $value == 0 ) {
+			return false;
+		}
+
+		return true;
+	}, ARRAY_FILTER_USE_BOTH );
+}
+
+function directorist_delete_listing_empty_metadata( $listing_id, array $metadata = array(), array $valid_metadata = array() ) {
+	$deletable_meta_data = array_diff_key( $metadata, $valid_metadata );
+	foreach ( $deletable_meta_data as $deletable_meta_key => $v ) {
+		delete_post_meta( $listing_id, $deletable_meta_key );
+	}
 }

@@ -491,9 +491,11 @@ class Directorist_Single_Listing {
 		$type          = get_post_meta( get_the_ID(), '_directory_type', true );
 		$default_image = Helper::default_preview_image_src( $type );
 
+		$image_size = apply_filters( 'directorist_single_listing_slider_image_size', 'large' );
+
 		// Get the preview images
 		$preview_img_id   = get_post_meta( $listing_id, '_listing_prv_img', true);
-		$preview_img_link = ! empty($preview_img_id) ? atbdp_get_image_source( $preview_img_id, 'large' ) : '';
+		$preview_img_link = ! empty($preview_img_id) ? atbdp_get_image_source( $preview_img_id, $image_size ) : '';
 		$preview_img_alt  = get_post_meta($preview_img_id, '_wp_attachment_image_alt', true);
 		$preview_img_alt  = ( ! empty( $preview_img_alt )  ) ? $preview_img_alt : get_the_title( $preview_img_id );
 
@@ -508,7 +510,7 @@ class Directorist_Single_Listing {
 
 			$image_links[] = [
 				'alt' => ( ! empty( $alt )  ) ? $alt : $listing_title,
-				'src' => atbdp_get_image_source( $img_id, 'large' ),
+				'src' => atbdp_get_image_source( $img_id, $image_size ),
 			];
 		}
 
@@ -762,32 +764,39 @@ class Directorist_Single_Listing {
 	}
 
 	public function submit_link() {
-		$id = get_the_ID();
-		$payment   = isset($_GET['payment']) ? sanitize_text_field( wp_unslash( $_GET['payment'] ) ) : '';
-		$redirect  = isset($_GET['redirect']) ? sanitize_text_field( wp_unslash( $_GET['redirect'] ) ) : '';
-		$display_preview = get_directorist_option('preview_enable', 1);
-		$link = '';
+		$payment         = isset( $_GET['payment'] ) ? sanitize_text_field( wp_unslash( $_GET['payment'] ) ) : '';
+		$redirect        = isset( $_GET['redirect'] ) ? sanitize_url( wp_unslash( $_GET['redirect'] ) ) : '';
+		$display_preview = (bool) get_directorist_option( 'preview_enable', 1 );
+		$link            = '';
+		$listing_id		 = get_the_ID();
 
-		if ($display_preview && $redirect) {
-			$post_id = isset($_GET['post_id']) ? sanitize_text_field( wp_unslash( $_GET['post_id'] ) ) : $id;
-			$edited = isset($_GET['edited']) ? sanitize_text_field( wp_unslash( $_GET['edited'] ) ) : '';
-			$pid = isset($_GET['p']) ? sanitize_text_field( wp_unslash( $_GET['p'] ) ) : '';
-			$pid = empty($pid) ? $post_id : $pid;
-			if (empty($payment)) {
+		if ( $display_preview && $redirect ) {
+			$edited     = isset( $_GET['edited'] ) ? sanitize_text_field( wp_unslash( $_GET['edited'] ) ) : '';
+			$listing_id = isset( $_GET['post_id'] ) ? sanitize_text_field( wp_unslash( $_GET['post_id'] ) ) : get_the_ID();
+			$listing_id = isset( $_GET['p'] ) ? sanitize_text_field( wp_unslash( $_GET['p'] ) ) : $listing_id;
+
+			if ( empty( $payment ) ) {
 				$redirect_page = get_directorist_option('edit_listing_redirect', 'view_listing');
-				if( 'view_listing' === $redirect_page){
-					$link = add_query_arg(array('p' => $pid, 'post_id' => $pid, 'reviewed' => 'yes', 'edited' => $edited ? 'yes' : 'no'), $redirect);
-				}
-				else{
+
+				if ( 'view_listing' === $redirect_page){
+					$link = add_query_arg( array(
+						'p'        => $listing_id,
+						'post_id'  => $listing_id,
+						'reviewed' => 'yes',
+						'edited'   => $edited ? 'yes' : 'no'
+					), $redirect );
+				} else{
 					$link = $redirect;
 				}
-			}
-			else {
-				$link = add_query_arg( array( 'atbdp_listing_id' => $pid, 'reviewed' => 'yes' ), sanitize_text_field( wp_unslash( $_GET['redirect'] ) ) );
+			} else {
+				$link = add_query_arg( array(
+					'atbdp_listing_id' => $listing_id,
+					'reviewed'         => 'yes'
+				), $redirect );
 			}
 		}
 
-		return $link;
+		return add_query_arg( 'listing_id', $listing_id, $link );
 	}
 
 	public function has_redirect_link() {
@@ -1176,11 +1185,12 @@ class Directorist_Single_Listing {
 		}
 
 		$meta_queries = array();
-		$meta_queries['expired'] = array(
-				'key'     => '_listing_status',
-				'value'   => 'expired',
-				'compare' => '!=',
-			);
+		// TODO: Status has been migrated, remove related code.
+		// $meta_queries['expired'] = array(
+		// 	'key'     => '_listing_status',
+		// 	'value'   => 'expired',
+		// 	'compare' => '!=',
+		// );
 		$meta_queries['directory_type'] = array(
 				'key'     => '_directory_type',
 				'value'   => $this->type,
