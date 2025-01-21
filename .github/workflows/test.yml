@@ -1,0 +1,38 @@
+# Workflow to deploy the WordPress plugin to WordPress.org upon a release.
+
+name: WordPress Plugin Check(PCP)
+
+on: push
+
+jobs:
+  build:
+    # Use the Ubuntu 22.04 runner for executing the job.
+    runs-on: ubuntu-22.04
+
+    steps:
+      # Step 1: Checkout the repository code at the version corresponding to the release event.
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup Node.js environment with the specified version (16.13.2) for the build process.
+      - name: Setup Node.js 16.13.2
+        uses: actions/setup-node@v2
+        with:
+          node-version: "16.13.2"
+
+      # Step 3: Install all npm dependencies required for building the plugin.
+      - name: Install npm dependencies
+        run: npm install
+
+      # Step 4: Build the production-ready version of the plugin using the npm `prod` script.
+      - name: Build plugin
+        run: npm run prod
+
+      # Step 5: Move the build output directory `__build/directorist` to the root level for further processing.
+      - name: Move directorist to root
+        run: mv __build/directorist ./directorist
+
+      - name: Run plugin check
+      uses: wordpress/plugin-check-action@v1
+      with:
+        build-dir: './directorist'
