@@ -1,20 +1,21 @@
-# Workflow to deploy the WordPress plugin to WordPress.org upon a release.
+name: WordPress Plugin Check (PCP)
 
-name: WordPress Plugin Check(PCP)
-
-on: push
+# Trigger the workflow on push events to the repository
+on:
+  push:
+    branches:
+      - test
 
 jobs:
   build:
-    # Use the Ubuntu 22.04 runner for executing the job.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository code at the version corresponding to the release event.
+      # Step 1: Check out the repository's code.
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Setup Node.js environment with the specified version (16.13.2) for the build process.
+      # Step 2: Set up the Node.js environment with the specified version (16.13.2) for the build process.
       - name: Setup Node.js 16.13.2
         uses: actions/setup-node@v2
         with:
@@ -32,7 +33,8 @@ jobs:
       - name: Move directorist to root
         run: mv __build/directorist ./directorist
 
+      # Step 6: Run the WordPress Plugin Check using the plugin-check action, specifying the build directory.
       - name: Run plugin check
-      uses: wordpress/plugin-check-action@v1
-      with:
-        build-dir: './directorist'
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: './directorist'
